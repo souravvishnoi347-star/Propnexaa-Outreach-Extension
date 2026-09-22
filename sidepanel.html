@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Propnexaa Outbound Copilot</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="brand">
+        <div class="brand-logo">⚡</div>
+        <div class="brand-text">
+          <h1>Propnexaa Copilot</h1>
+          <span class="sub-text">Outbound & Thought-Leadership AI</span>
+        </div>
+      </div>
+      <div id="platform-badge" class="badge badge-neutral">Detecting...</div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <nav class="nav-tabs">
+      <button class="nav-btn active" data-tab="connect">Connect & DM</button>
+      <button class="nav-btn" data-tab="comment">Smart Comment</button>
+      <button class="nav-btn" data-tab="post">Post Creator</button>
+      <button class="nav-btn" data-tab="settings">Settings</button>
+    </nav>
+
+    <!-- TAB 1: Connect & DM -->
+    <section id="tab-connect" class="tab-content active">
+      <div class="card context-card">
+        <div class="card-header">
+          <span class="card-label">Active Prospect Detected</span>
+          <button id="btn-refresh-prospect" class="btn-icon" title="Refresh Prospect Info">🔄</button>
+        </div>
+        <div class="prospect-info">
+          <h3 id="prospect-name">No Profile Detected</h3>
+          <p id="prospect-headline" class="text-muted">Navigate to a LinkedIn or Instagram profile.</p>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Select Outreach Type</label>
+        <div class="radio-group">
+          <label class="radio-chip">
+            <input type="radio" name="outreach-type" value="connection_note" checked>
+            <span>Connection Note (&lt;300 chars)</span>
+          </label>
+          <label class="radio-chip">
+            <input type="radio" name="outreach-type" value="lavender_dm">
+            <span>Lavender 40-Word DM</span>
+          </label>
+          <label class="radio-chip">
+            <input type="radio" name="outreach-type" value="instagram_dm">
+            <span>Instagram Story/DM</span>
+          </label>
+        </div>
+      </div>
+
+      <button id="btn-generate-outreach" class="btn-primary">
+        <span>✨ Generate Tailored Message</span>
+      </button>
+
+      <div id="outreach-output-box" class="output-box hidden">
+        <div class="output-header">
+          <span id="char-count" class="counter-badge">0 / 300 chars</span>
+          <span id="framework-used" class="framework-badge">LAVENDER ENGINE</span>
+        </div>
+        <textarea id="outreach-text" rows="5" class="custom-textarea" placeholder="Generated message will appear here..."></textarea>
+        <div class="button-row">
+          <button id="btn-copy-outreach" class="btn-secondary">📋 Copy</button>
+          <button id="btn-insert-outreach" class="btn-action">⚡ Insert into Page</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: Smart Comment -->
+    <section id="tab-comment" class="tab-content">
+      <div class="card context-card">
+        <div class="card-header">
+          <span class="card-label">Active Post Detected</span>
+          <button id="btn-refresh-post" class="btn-icon" title="Refresh Post Info">🔄</button>
+        </div>
+        <div class="post-preview">
+          <p id="post-author" class="font-bold text-sm">Author: -</p>
+          <p id="post-snippet" class="text-muted text-xs truncate-2">Click "✨ AI Comment" on any LinkedIn/Instagram post to capture it here.</p>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Comment Angle</label>
+        <select id="comment-angle" class="custom-select">
+          <option value="thoughtful_insight">💡 Thoughtful Industry Insight (Value-Add)</option>
+          <option value="curious_question">❓ Curious Follow-Up Question (Invites Reply)</option>
+          <option value="short_punchy">⚡ Short & Punchy Peer Endorsement</option>
+        </select>
+      </div>
+
+      <button id="btn-generate-comment" class="btn-primary">
+        <span>✨ Generate Smart Comment</span>
+      </button>
+
+      <div id="comment-output-box" class="output-box hidden">
+        <textarea id="comment-text" rows="4" class="custom-textarea"></textarea>
+        <div class="button-row">
+          <button id="btn-copy-comment" class="btn-secondary">📋 Copy</button>
+          <button id="btn-insert-comment" class="btn-action">⚡ Insert into Comment Box</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: Post Creator -->
+    <section id="tab-post" class="tab-content">
+      <div class="form-group">
+        <label>Post Topic or Raw Idea</label>
+        <textarea id="post-topic" rows="3" class="custom-textarea" placeholder="e.g. Why Dubai brokers lose 60% of after-hours Bayut leads, or Off-plan market insight..."></textarea>
+      </div>
+
+      <div class="form-group">
+        <label>Post Style</label>
+        <select id="post-style" class="custom-select">
+          <option value="story_breakdown">📖 Problem + Real Estate Breakdown + Takeaway</option>
+          <option value="contrarian_hook">🔥 Contrarian Hot-Take (High Engagement)</option>
+          <option value="case_study">📊 Propnexaa Case Study (Speed to Lead)</option>
+        </select>
+      </div>
+
+      <button id="btn-generate-post" class="btn-primary">
+        <span>🚀 Draft Viral LinkedIn Post</span>
+      </button>
+
+      <div id="post-output-box" class="output-box hidden">
+        <textarea id="post-text" rows="8" class="custom-textarea"></textarea>
+        <div class="button-row">
+          <button id="btn-copy-post" class="btn-secondary">📋 Copy Post</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 4: Settings -->
+    <section id="tab-settings" class="tab-content">
+      <div class="form-group">
+        <label>Google Gemini API Key</label>
+        <input type="password" id="setting-api-key" class="custom-input" placeholder="AIzaSy...">
+        <span class="help-text">Direct connection to Gemini 3.5 Flash / 3.6 Flash.</span>
+      </div>
+
+      <div class="form-group">
+        <label>Your Name (Sender)</label>
+        <input type="text" id="setting-sender-name" class="custom-input" value="Sourav">
+      </div>
+
+      <div class="form-group">
+        <label>Your Company / Product</label>
+        <input type="text" id="setting-company-name" class="custom-input" value="Propnexaa">
+      </div>
+
+      <div class="form-group">
+        <label>Core Value Proposition</label>
+        <textarea id="setting-offer" rows="2" class="custom-textarea">15-second WhatsApp AI lead response & automated CRM routing for Dubai brokers</textarea>
+      </div>
+
+      <button id="btn-save-settings" class="btn-primary">
+        <span>💾 Save Settings</span>
+      </button>
+      <p id="save-status" class="status-msg hidden">Saved successfully!</p>
+    </section>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <span>Propnexaa v1.0 • Dubai Outbound Engine</span>
+    </footer>
+  </div>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>

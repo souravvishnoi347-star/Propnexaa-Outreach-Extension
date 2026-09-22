@@ -1,0 +1,45 @@
+{
+  "manifest_version": 3,
+  "name": "Propnexaa Outbound Copilot",
+  "version": "1.0.0",
+  "description": "AI outreach copilot for LinkedIn & Instagram: 1-click connection notes, Lavender DMs, and smart comment generator.",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "action": {
+    "default_title": "Open Propnexaa Copilot"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+  "permissions": [
+    "sidePanel",
+    "activeTab",
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://*.linkedin.com/*",
+    "https://*.instagram.com/*",
+    "https://generativelanguage.googleapis.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://*.linkedin.com/*"],
+      "js": ["content-scripts/linkedin.js"],
+      "css": ["content-scripts/content.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://*.instagram.com/*"],
+      "js": ["content-scripts/instagram.js"],
+      "css": ["content-scripts/content.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}
