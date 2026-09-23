@@ -1,32 +1,15 @@
-// Propnexaa Outbound Copilot - Side Panel Script
+// Propnexaa Outbound Copilot - Side Panel Script v1.1
+// Uses direct DOM inspection via chrome.scripting for 100% reliable context capture
 
-let activeProspect = null;
-let activePost = null;
-
-// Initialize on DOM load
 document.addEventListener('DOMContentLoaded', async () => {
   initTabs();
   await loadSettings();
-  await detectActiveTab();
+  
+  // Auto-scan page immediately on sidepanel open
+  await scanActivePageDirect();
 
-  // Listen for storage changes (e.g. content script discovered new profile or post)
-  chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === 'local') {
-      if (changes.activeProfileContext?.newValue) {
-        updateProspectUI(changes.activeProfileContext.newValue);
-      }
-      if (changes.activePostContext?.newValue) {
-        updatePostUI(changes.activePostContext.newValue);
-      }
-      if (changes.activeInstagramProfile?.newValue) {
-        updateInstagramProfileUI(changes.activeInstagramProfile.newValue);
-      }
-    }
-  });
-
-  // Event Listeners
-  document.getElementById('btn-refresh-prospect')?.addEventListener('click', detectActiveTab);
-  document.getElementById('btn-refresh-post')?.addEventListener('click', refreshPostContext);
+  // Button Listeners
+  document.getElementById('btn-scan-page')?.addEventListener('click', scanActivePageDirect);
   document.getElementById('btn-generate-outreach')?.addEventListener('click', handleGenerateOutreach);
   document.getElementById('btn-copy-outreach')?.addEventListener('click', () => copyToClipboard('outreach-text', 'btn-copy-outreach'));
   document.getElementById('btn-insert-outreach')?.addEventListener('click', handleInsertOutreach);
@@ -39,8 +22,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('btn-copy-post')?.addEventListener('click', () => copyToClipboard('post-text', 'btn-copy-post'));
 
   document.getElementById('btn-save-settings')?.addEventListener('click', handleSaveSettings);
-
-  // Character counter for outreach text
   document.getElementById('outreach-text')?.addEventListener('input', updateCharCount);
 });
 
@@ -59,80 +40,191 @@ function initTabs() {
   });
 }
 
-// Detect Active Tab
-async function detectActiveTab() {
+// Direct DOM Inspection via chrome.scripting (Rock-Solid Fallback & Real-Time Scraper)
+async function scanActivePageDirect() {
+  const statusEl = document.getElementById('scan-status');
+  const badgeEl = document.getElementById('platform-badge');
+  if (statusEl) statusEl.innerText = 'Scanning active page...';
+
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  const badge = document.getElementById('platform-badge');
+  if (!tab?.id || !tab.url) {
+    if (statusEl) statusEl.innerText = 'No active tab detected';
+    return;
+  }
 
-  if (!tab?.url) return;
-
+  // Check platform
   if (tab.url.includes('linkedin.com')) {
-    badge.className = 'badge badge-linkedin';
-    badge.innerText = 'LinkedIn Active';
+    badgeEl.className = 'badge badge-linkedin';
+    badgeEl.innerText = 'LinkedIn';
+  } else if (tab.url.includes('instagram.com')) {
+    badgeEl.className = 'badge badge-instagram';
+    badgeEl.innerText = 'Instagram';
+  } else {
+    badgeEl.className = 'badge badge-neutral';
+    badgeEl.innerText = 'Web';
+  }
 
-    // Query content script for profile
-    chrome.tabs.sendMessage(tab.id, { type: 'GET_PAGE_CONTEXT' }, (res) => {
-      if (chrome.runtime.lastError || !res?.profile) {
-        // Fallback to storage
-        chrome.storage.local.get('activeProfileContext', (data) => {
-          if (data.activeProfileContext) updateProspectUI(data.activeProfileContext);
-        });
-      } else {
-        updateProspectUI(res.profile);
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: () => {
+        const isLinkedIn = window.location.hostname.includes('linkedin.com');
+        const isInstagram = window.location.hostname.includes('instagram.com');
+
+        // 1. LinkedIn Scraper
+        if (isLinkedIn) {
+          // Name selectors (supports 2024-2026 redesigns)
+          const nameSelectors = [
+            'h1.text-heading-xlarge',
+            'section.artdeco-card h1',
+            '.pv-top-card--list h1',
+            '.ph5 h1',
+            'main h1',
+            'h1'
+          ];
+          let name = '';
+          for (const sel of nameSelectors) {
+            const el = document.querySelector(sel);
+            const txt = el?.innerText?.trim()?.split('\n')[0];
+            if (txt && txt.length > 1 && !txt.includes('LinkedIn') && !txt.includes('Feed')) {
+              name = txt;
+              break;
+            }
+          }
+
+          // Headline selectors
+          const headlineSelectors = [
+            '.text-body-medium.break-words',
+            '.pv-text-details__left-panel div.text-body-medium',
+            'div[data-generated-suggestion-target]',
+            '.pv-top-card-section__headline',
+            '.text-body-medium'
+          ];
+          let headline = '';
+          for (const sel of headlineSelectors) {
+            const el = document.querySelector(sel);
+            const txt = el?.innerText?.trim();
+            if (txt && txt.length > 2 && txt !== name) {
+              headline = txt;
+              break;
+            }
+          }
+
+          // Company selectors
+          const companySelectors = [
+            '.pv-text-details__right-panel button span',
+            'button[aria-label*="Current company"]',
+            'div[aria-label="Current company"]',
+            '#experience ~ div ul li:first-child .t-bold span',
+            '.experience-item .t-bold span'
+          ];
+          let company = '';
+          for (const sel of companySelectors) {
+            const el = document.querySelector(sel);
+            const txt = el?.innerText?.trim()?.split('\n')[0];
+            if (txt && txt.length > 1) {
+              company = txt;
+              break;
+            }
+          }
+
+          // Visible Feed Post (Find post visible on screen)
+          let post = null;
+          const postCards = Array.from(document.querySelectorAll('.feed-shared-update-v2, div[data-urn*="activity"], div.occludable-update'));
+          for (const card of postCards) {
+            const rect = card.getBoundingClientRect();
+            // Post in viewport or hovered
+            if (rect.top >= -50 && rect.top <= window.innerHeight * 0.8) {
+              const authorEl = card.querySelector('.update-components-actor__name, .feed-shared-actor__name, span[dir="ltr"]');
+              const textEl = card.querySelector('.feed-shared-update-v2__description, .update-components-text, .feed-shared-text');
+              if (textEl && textEl.innerText.trim().length > 15) {
+                post = {
+                  author: authorEl?.innerText?.split('\n')[0]?.trim() || 'Author',
+                  content: textEl.innerText.trim()
+                };
+                break;
+              }
+            }
+          }
+
+          // Fallback to first post if none in viewport
+          if (!post && postCards[0]) {
+            const card = postCards[0];
+            const authorEl = card.querySelector('.update-components-actor__name, .feed-shared-actor__name, span[dir="ltr"]');
+            const textEl = card.querySelector('.feed-shared-update-v2__description, .update-components-text, .feed-shared-text');
+            if (textEl && textEl.innerText.trim().length > 15) {
+              post = {
+                author: authorEl?.innerText?.split('\n')[0]?.trim() || 'Author',
+                content: textEl.innerText.trim()
+              };
+            }
+          }
+
+          return { platform: 'linkedin', name, headline, company, post };
+        }
+
+        // 2. Instagram Scraper
+        if (isInstagram) {
+          const usernameEl = document.querySelector('header h2') || document.querySelector('header h1');
+          const bioEl = document.querySelector('header section div:nth-child(3)') || document.querySelector('header .-vDIg');
+          const username = usernameEl?.innerText?.trim() || window.location.pathname.replace(/\//g, '');
+          const bio = bioEl?.innerText?.trim() || '';
+
+          const article = document.querySelector('article');
+          const captionEl = article?.querySelector('h1, span._aacl');
+          const authorEl = article?.querySelector('header a');
+          const post = captionEl ? { author: authorEl?.innerText?.trim() || username, content: captionEl.innerText.trim() } : null;
+
+          return { platform: 'instagram', name: username, headline: bio, company: username, post };
+        }
+
+        return { platform: 'other' };
       }
     });
 
-  } else if (tab.url.includes('instagram.com')) {
-    badge.className = 'badge badge-instagram';
-    badge.innerText = 'Instagram Active';
+    const data = results?.[0]?.result;
+    if (data) {
+      let capturedItems = [];
 
-    chrome.tabs.sendMessage(tab.id, { type: 'GET_INSTAGRAM_CONTEXT' }, (res) => {
-      if (res?.profile) updateInstagramProfileUI(res.profile);
-      if (res?.post) updatePostUI(res.post);
-    });
+      // Update Prospect info
+      if (data.name) {
+        document.getElementById('input-prospect-name').value = data.name;
+        capturedItems.push(data.name);
+      }
+      if (data.headline || data.company) {
+        const fullCompany = [data.company, data.headline].filter(Boolean).join(' • ');
+        document.getElementById('input-prospect-company').value = fullCompany;
+      }
+      if (data.name) {
+        const captureBadge = document.getElementById('capture-badge');
+        if (captureBadge) {
+          captureBadge.className = 'pill-badge pill-success';
+          captureBadge.innerText = 'Captured';
+        }
+      }
 
-  } else {
-    badge.className = 'badge badge-neutral';
-    badge.innerText = 'Offline';
-  }
-}
+      // Update Post info
+      if (data.post) {
+        document.getElementById('input-post-author').value = data.post.author;
+        document.getElementById('input-post-content').value = data.post.content;
+        capturedItems.push('Active Post');
 
-function updateProspectUI(profile) {
-  if (!profile) return;
-  activeProspect = profile;
+        const postBadge = document.getElementById('post-capture-badge');
+        if (postBadge) {
+          postBadge.className = 'pill-badge pill-success';
+          postBadge.innerText = 'Captured';
+        }
+      }
 
-  document.getElementById('prospect-name').innerText = profile.name || 'Unnamed Prospect';
-  document.getElementById('prospect-headline').innerText = profile.headline || profile.company || 'Profile detected';
-}
-
-function updateInstagramProfileUI(profile) {
-  if (!profile) return;
-  activeProspect = {
-    platform: 'instagram',
-    name: profile.fullName || profile.username,
-    headline: profile.bio || 'Instagram Real Estate Account',
-    company: profile.username
-  };
-
-  document.getElementById('prospect-name').innerText = activeProspect.name;
-  document.getElementById('prospect-headline').innerText = `@${profile.username} • ${profile.bio || 'Active Profile'}`;
-}
-
-function updatePostUI(post) {
-  if (!post) return;
-  activePost = post;
-
-  document.getElementById('post-author').innerText = `Author: ${post.author || 'Creator'}`;
-  document.getElementById('post-snippet').innerText = post.content || post.caption || 'Captured post';
-}
-
-async function refreshPostContext() {
-  const data = await chrome.storage.local.get(['activePostContext', 'activeInstagramPost']);
-  const post = data.activePostContext || data.activeInstagramPost;
-  if (post) {
-    updatePostUI(post);
-  } else {
-    alert('Click "✨ AI Comment" on any post in your feed first!');
+      if (capturedItems.length > 0) {
+        statusEl.innerText = `✅ Captured: ${capturedItems.join(' & ')}`;
+      } else {
+        statusEl.innerText = 'No profile/post detected (Type manually below)';
+      }
+    }
+  } catch (err) {
+    console.error('Scan error:', err);
+    statusEl.innerText = 'Tip: Refresh the LinkedIn/Instagram tab once';
   }
 }
 
@@ -141,7 +233,7 @@ async function callGemini(prompt, isJson = false) {
   const settings = await chrome.storage.local.get(['apiKey']);
   const apiKey = settings.apiKey?.trim();
   if (!apiKey) {
-    throw new Error('Please enter your Gemini API Key in the Settings tab to activate the copilot.');
+    throw new Error('Please enter your Gemini API Key in the Settings tab (⚙️) to activate the copilot.');
   }
 
   const payload = {
@@ -187,10 +279,9 @@ async function handleGenerateOutreach() {
   const company = settings.companyName || 'Propnexaa';
   const offer = settings.offerDescription || 'WhatsApp AI lead routing for Dubai brokers';
 
-  const prospectName = activeProspect?.name || 'there';
+  const prospectName = document.getElementById('input-prospect-name')?.value?.trim() || 'there';
   const prospectFirstName = prospectName.split(' ')[0] || 'there';
-  const headline = activeProspect?.headline || '';
-  const prospectCompany = activeProspect?.company || '';
+  const prospectCompany = document.getElementById('input-prospect-company')?.value?.trim() || '';
 
   btn.disabled = true;
   btn.innerText = '⚡ Crafting with Gemini...';
@@ -200,24 +291,22 @@ async function handleGenerateOutreach() {
     if (type === 'connection_note') {
       prompt = `You are ${sender}, founder of ${company}. Write a personalized LinkedIn Connection Request note to:
 Prospect: ${prospectName}
-Headline: ${headline}
-Company: ${prospectCompany}
+Details: ${prospectCompany}
 Offer Context: ${offer}
 
 RULES (STRICT LINKEDIN CONNECTION RULES):
-1. LENGTH: Must be STRICTLY UNDER 280 CHARACTERS total (LinkedIn 300 char hard limit).
+1. LENGTH: Must be STRICTLY UNDER 270 CHARACTERS total (LinkedIn 300 char hard limit).
 2. TONE: Friendly, peer-to-peer. NOT a hard pitch.
 3. STRUCTURE:
    - "Hey ${prospectFirstName}, saw your work at ${prospectCompany || 'in Dubai real estate'}."
-   - 1 quick line connecting to after-hours lead response or WhatsApp workflows.
+   - 1 quick line referencing after-hours lead speed or WhatsApp response.
    - "Would love to connect!"
 4. Return ONLY the raw connection note text without quotes.`;
 
     } else if (type === 'lavender_dm') {
       prompt = `You are ${sender}, founder of ${company}. Write a high-converting Lavender 40-word LinkedIn InMail/DM to:
 Prospect: ${prospectName}
-Headline: ${headline}
-Company: ${prospectCompany}
+Details: ${prospectCompany}
 Offer Context: ${offer}
 
 LAVENDER 40-WORD DIRECT MESSAGE RULES:
@@ -241,11 +330,11 @@ LAVENDER 40-WORD DIRECT MESSAGE RULES:
     } else {
       // Instagram Story/DM
       prompt = `You are ${sender} reaching out on Instagram to a luxury real estate broker in Dubai.
-Target: ${prospectName} (${headline})
+Target: ${prospectName} (${prospectCompany})
 
 RULES:
 1. Short, casual, Instagram DM tone (under 30 words).
-2. Reference their listings or property reels.
+2. Reference their listings or property walkthroughs.
 3. Example: "Hey ${prospectFirstName}, loved that recent villa walkthrough you posted. Quick question — do you handle all the WhatsApp inquiries manually or have an automation set up?"
 4. Return ONLY the text.`;
     }
@@ -272,21 +361,43 @@ async function handleInsertOutreach() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) return;
 
-  chrome.tabs.sendMessage(tab.id, { type: 'INSERT_NOTE_TEXT', text }, (res) => {
-    // If not in modal, copy to clipboard as fallback
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      args: [text],
+      func: (noteText) => {
+        // Look for connection note textarea
+        const textarea = document.querySelector('textarea#custom-message') ||
+                         document.querySelector('.send-invite textarea') ||
+                         document.querySelector('textarea[name="message"]') ||
+                         document.querySelector('textarea');
+        if (textarea) {
+          textarea.value = noteText;
+          textarea.dispatchEvent(new Event('input', { bubbles: true }));
+          textarea.dispatchEvent(new Event('change', { bubbles: true }));
+          return true;
+        }
+        return false;
+      }
+    });
+
     navigator.clipboard.writeText(text);
-    alert('Copied to clipboard! (If Connection Modal is open on LinkedIn, paste it directly with Ctrl+V)');
-  });
+    alert('Copied to clipboard & auto-inserted into open connection modal!');
+  } catch (err) {
+    navigator.clipboard.writeText(text);
+    alert('Copied to clipboard! (Press Ctrl+V to paste)');
+  }
 }
 
 // Smart Comment Generator
 async function handleGenerateComment() {
   const btn = document.getElementById('btn-generate-comment');
   const angle = document.getElementById('comment-angle').value;
-  const post = activePost;
+  const author = document.getElementById('input-post-author')?.value || 'Author';
+  const content = document.getElementById('input-post-content')?.value || '';
 
-  if (!post || !post.content) {
-    alert('Please click "✨ AI Comment" on a LinkedIn or Instagram post first!');
+  if (!content) {
+    alert('Please enter or scan a post first! Click "1-Click Scan Active Page" while viewing a post.');
     return;
   }
 
@@ -295,8 +406,8 @@ async function handleGenerateComment() {
 
   try {
     const prompt = `You are a savvy Dubai real estate tech founder reading a post on social media.
-Post Author: ${post.author}
-Post Content: "${post.content.slice(0, 800)}"
+Post Author: ${author}
+Post Content: "${content.slice(0, 800)}"
 Selected Style: ${angle}
 
 COMMENT RULES:
@@ -328,14 +439,38 @@ async function handleInsertComment() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) return;
 
-  chrome.tabs.sendMessage(tab.id, { type: 'INSERT_COMMENT_TEXT', text }, (res) => {
-    if (res?.success) {
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      args: [text],
+      func: (commentText) => {
+        const commentBox = document.querySelector('.ql-editor[contenteditable="true"]') ||
+                           document.querySelector('textarea[aria-label*="Add a comment"]') ||
+                           document.querySelector('.comments-comment-box__editor .ql-editor');
+        if (commentBox) {
+          if (commentBox.isContentEditable) {
+            commentBox.innerText = commentText;
+            commentBox.dispatchEvent(new Event('input', { bubbles: true }));
+          } else {
+            commentBox.value = commentText;
+            commentBox.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+          return true;
+        }
+        return false;
+      }
+    });
+
+    navigator.clipboard.writeText(text);
+    if (results?.[0]?.result) {
       alert('Comment inserted directly into LinkedIn comment box!');
     } else {
-      navigator.clipboard.writeText(text);
       alert('Copied to clipboard! Click inside the LinkedIn comment box and press Ctrl+V.');
     }
-  });
+  } catch (err) {
+    navigator.clipboard.writeText(text);
+    alert('Copied to clipboard! Click inside the LinkedIn comment box and press Ctrl+V.');
+  }
 }
 
 // Viral Post Generator
@@ -391,7 +526,7 @@ function updateCharCount() {
   const counter = document.getElementById('char-count');
   if (counter) {
     counter.innerText = `${text.length} / 300 chars`;
-    if (text.length > 300) {
+    if (text.length > 270) {
       counter.style.color = '#ef4444';
     } else {
       counter.style.color = '#38bdf8';

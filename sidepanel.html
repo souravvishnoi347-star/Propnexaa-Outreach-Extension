@@ -20,6 +20,14 @@
       <div id="platform-badge" class="badge badge-neutral">Detecting...</div>
     </header>
 
+    <!-- Scan Bar -->
+    <div class="scan-bar">
+      <button id="btn-scan-page" class="btn-scan">
+        <span>⚡ 1-Click Scan Active Page</span>
+      </button>
+      <span id="scan-status" class="scan-status-text">Ready to scan</span>
+    </div>
+
     <!-- Navigation Tabs -->
     <nav class="nav-tabs">
       <button class="nav-btn active" data-tab="connect">Connect & DM</button>
@@ -32,12 +40,16 @@
     <section id="tab-connect" class="tab-content active">
       <div class="card context-card">
         <div class="card-header">
-          <span class="card-label">Active Prospect Detected</span>
-          <button id="btn-refresh-prospect" class="btn-icon" title="Refresh Prospect Info">🔄</button>
+          <span class="card-label">Target Prospect</span>
+          <span id="capture-badge" class="pill-badge pill-neutral">Manual / Auto</span>
         </div>
-        <div class="prospect-info">
-          <h3 id="prospect-name">No Profile Detected</h3>
-          <p id="prospect-headline" class="text-muted">Navigate to a LinkedIn or Instagram profile.</p>
+        <div class="form-group mb-2">
+          <label>Prospect Name</label>
+          <input type="text" id="input-prospect-name" class="custom-input" placeholder="e.g. Mohanad Alwadiya">
+        </div>
+        <div class="form-group">
+          <label>Company / Role / Headline</label>
+          <input type="text" id="input-prospect-company" class="custom-input" placeholder="e.g. Harbor Real Estate • CEO & Managing Director">
         </div>
       </div>
 
@@ -80,12 +92,16 @@
     <section id="tab-comment" class="tab-content">
       <div class="card context-card">
         <div class="card-header">
-          <span class="card-label">Active Post Detected</span>
-          <button id="btn-refresh-post" class="btn-icon" title="Refresh Post Info">🔄</button>
+          <span class="card-label">Target Post</span>
+          <span id="post-capture-badge" class="pill-badge pill-neutral">Auto-Captured</span>
         </div>
-        <div class="post-preview">
-          <p id="post-author" class="font-bold text-sm">Author: -</p>
-          <p id="post-snippet" class="text-muted text-xs truncate-2">Click "✨ AI Comment" on any LinkedIn/Instagram post to capture it here.</p>
+        <div class="form-group mb-2">
+          <label>Post Author</label>
+          <input type="text" id="input-post-author" class="custom-input" placeholder="Author Name">
+        </div>
+        <div class="form-group">
+          <label>Post Content</label>
+          <textarea id="input-post-content" rows="3" class="custom-textarea" placeholder="Post text will auto-populate when you click '1-Click Scan Active Page', or paste any post here..."></textarea>
         </div>
       </div>
 
@@ -143,8 +159,8 @@
     <section id="tab-settings" class="tab-content">
       <div class="form-group">
         <label>Google Gemini API Key</label>
-        <input type="password" id="setting-api-key" class="custom-input" placeholder="AIzaSy...">
-        <span class="help-text">Direct connection to Gemini 3.5 Flash / 3.6 Flash.</span>
+        <input type="password" id="setting-api-key" class="custom-input" placeholder="AIzaSy... (Pre-configured)">
+        <span class="help-text">Direct high-speed connection to Gemini 3.5 Flash.</span>
       </div>
 
       <div class="form-group">
@@ -170,7 +186,7 @@
 
     <!-- Footer -->
     <footer class="app-footer">
-      <span>Propnexaa v1.0 • Dubai Outbound Engine</span>
+      <span>Propnexaa v1.1 • Live DOM Intelligence</span>
     </footer>
   </div>
 
