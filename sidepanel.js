@@ -46,7 +46,12 @@ async function scanActivePageDirect() {
   const badgeEl = document.getElementById('platform-badge');
   if (statusEl) statusEl.innerText = 'Scanning active page...';
 
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  // Smart Tab Query: Always find the active web tab, ignoring extension sidepanels
+  const tabs = await chrome.tabs.query({ currentWindow: true });
+  let tab = tabs.find(t => t.active && !t.url?.startsWith('chrome-extension://')) ||
+            tabs.find(t => t.url && (t.url.includes('linkedin.com') || t.url.includes('instagram.com'))) ||
+            tabs[0];
+
   if (!tab?.id || !tab.url) {
     if (statusEl) statusEl.innerText = 'No active tab detected';
     return;
@@ -73,86 +78,119 @@ async function scanActivePageDirect() {
 
         // 1. LinkedIn Scraper
         if (isLinkedIn) {
-          // Name selectors (supports 2024-2026 redesigns)
-          const nameSelectors = [
-            'h1.text-heading-xlarge',
-            'section.artdeco-card h1',
-            '.pv-top-card--list h1',
-            '.ph5 h1',
-            'main h1',
-            'h1'
-          ];
           let name = '';
-          for (const sel of nameSelectors) {
-            const el = document.querySelector(sel);
-            const txt = el?.innerText?.trim()?.split('\n')[0];
-            if (txt && txt.length > 1 && !txt.includes('LinkedIn') && !txt.includes('Feed')) {
-              name = txt;
-              break;
+
+          // Method A: document.title (100% reliable on LinkedIn profiles)
+          // e.g. "(6) Oren Dmitrishin | LinkedIn" or "Oren Dmitrishin - Real Estate Broker | LinkedIn"
+          if (document.title && document.title.includes('LinkedIn')) {
+            const cleanTitle = document.title
+              .replace(/^\(\d+\)\s*/, '') // remove notifications like (6)
+              .replace(/\s*\|\s*LinkedIn.*$/i, '')
+              .replace(/\s*-\s*LinkedIn.*$/i, '')
+              .trim();
+            const parts = cleanTitle.split(/[-–—|]/);
+            const firstPart = parts[0]?.trim();
+            if (firstPart && firstPart.length > 1 && !firstPart.includes('Feed') && !firstPart.includes('Search') && !firstPart.includes('Messaging') && !firstPart.includes('Notifications')) {
+              name = firstPart;
             }
           }
 
-          // Headline selectors
-          const headlineSelectors = [
-            '.text-body-medium.break-words',
-            '.pv-text-details__left-panel div.text-body-medium',
-            'div[data-generated-suggestion-target]',
-            '.pv-top-card-section__headline',
-            '.text-body-medium'
-          ];
-          let headline = '';
-          for (const sel of headlineSelectors) {
-            const el = document.querySelector(sel);
-            const txt = el?.innerText?.trim();
-            if (txt && txt.length > 2 && txt !== name) {
-              headline = txt;
-              break;
-            }
-          }
-
-          // Company selectors
-          const companySelectors = [
-            '.pv-text-details__right-panel button span',
-            'button[aria-label*="Current company"]',
-            'div[aria-label="Current company"]',
-            '#experience ~ div ul li:first-child .t-bold span',
-            '.experience-item .t-bold span'
-          ];
-          let company = '';
-          for (const sel of companySelectors) {
-            const el = document.querySelector(sel);
-            const txt = el?.innerText?.trim()?.split('\n')[0];
-            if (txt && txt.length > 1) {
-              company = txt;
-              break;
-            }
-          }
-
-          // Visible Feed Post (Find post visible on screen)
-          let post = null;
-          const postCards = Array.from(document.querySelectorAll('.feed-shared-update-v2, div[data-urn*="activity"], div.occludable-update'));
-          for (const card of postCards) {
-            const rect = card.getBoundingClientRect();
-            // Post in viewport or hovered
-            if (rect.top >= -50 && rect.top <= window.innerHeight * 0.8) {
-              const authorEl = card.querySelector('.update-components-actor__name, .feed-shared-actor__name, span[dir="ltr"]');
-              const textEl = card.querySelector('.feed-shared-update-v2__description, .update-components-text, .feed-shared-text');
-              if (textEl && textEl.innerText.trim().length > 15) {
-                post = {
-                  author: authorEl?.innerText?.split('\n')[0]?.trim() || 'Author',
-                  content: textEl.innerText.trim()
-                };
+          // Method B: DOM H1 Elements
+          if (!name) {
+            const h1Elements = Array.from(document.querySelectorAll('h1'));
+            for (const el of h1Elements) {
+              const clone = el.cloneNode(true);
+              clone.querySelectorAll('.visually-hidden, button, span[class*="badge"], span[class*="dist-value"], svg').forEach(n => n.remove());
+              const t = (clone.innerText || clone.textContent || '').trim().split('\n')[0];
+              if (t && t.length > 2 && !t.includes('LinkedIn') && !t.includes('Feed') && !t.includes('Search')) {
+                name = t;
                 break;
               }
             }
           }
 
-          // Fallback to first post if none in viewport
-          if (!post && postCards[0]) {
-            const card = postCards[0];
-            const authorEl = card.querySelector('.update-components-actor__name, .feed-shared-actor__name, span[dir="ltr"]');
-            const textEl = card.querySelector('.feed-shared-update-v2__description, .update-components-text, .feed-shared-text');
-            if (textEl && textEl.innerText.trim().length > 15) {
+          // Headline Extraction
+          let headline = '';
+          const topCard = document.querySelector('section.artdeco-card') || 
+                          document.querySelector('main section:first-of-type') || 
+                          document.querySelector('.pv-top-card') ||
+                          document.body;
+
+          if (topCard) {
+            const textElements = Array.from(topCard.querySelectorAll('.text-body-medium, div[class*="headline"], div[data-generated-suggestion-target], .pv-top-card-section__headline'));
+            for (const el of textElements) {
+              const t = el.innerText?.trim();
+              if (t && t.length > 3 && t !== name && !t.includes('connections') && !t.includes('Contact info')) {
+                headline = t.split('\n')[0].trim();
+                break;
+              }
+            }
+
+            // Fallback: search divs for real estate/role keywords
+            if (!headline) {
+              const divs = Array.from(topCard.querySelectorAll('div'));
+              for (const d of divs) {
+                const t = d.innerText?.trim();
+                if (t && t.length > 5 && t.length < 150 && t !== name && !t.includes('connections') && !t.includes('Contact info') && !t.includes('mutual')) {
+                  if (t.toLowerCase().includes('broker') || t.toLowerCase().includes('estate') || t.toLowerCase().includes('founder') || t.toLowerCase().includes('ceo') || t.toLowerCase().includes('agent') || t.toLowerCase().includes('manager') || t.toLowerCase().includes('at ')) {
+                    headline = t.split('\n')[0].trim();
+                    break;
+                  }
+                }
+              }
+            }
+          }
+
+          // Company Extraction (e.g. from "Broker at ThriveState")
+          let company = '';
+          if (headline && /\bat\b|\b@\b/i.test(headline)) {
+            const match = headline.match(/\b(?:at|@)\s+([^,|•\n]+)/i);
+            if (match && match[1]) {
+              company = match[1].trim();
+            }
+          }
+          if (!company) {
+            const companySelectors = [
+              '.pv-text-details__right-panel button span',
+              'button[aria-label*="Current company"]',
+              'div[aria-label="Current company"]',
+              '.experience-item .t-bold span',
+              '#experience ~ div ul li:first-child .t-bold span'
+            ];
+            for (const sel of companySelectors) {
+              const el = document.querySelector(sel);
+              const t = el?.innerText?.trim()?.split('\n')[0];
+              if (t && t.length > 1) {
+                company = t;
+                break;
+              }
+            }
+          }
+
+          // Visible Feed Post (Center-weighted viewport detection)
+          let post = null;
+          const allPosts = Array.from(document.querySelectorAll('.feed-shared-update-v2, div[data-urn*="activity"], div.occludable-update, article, div[data-id*="urn:li:activity"]'));
+          let bestPost = null;
+          let minDistance = Infinity;
+          const centerY = window.innerHeight / 2;
+
+          for (const p of allPosts) {
+            const rect = p.getBoundingClientRect();
+            if (rect.height > 60 && rect.bottom > 50 && rect.top < window.innerHeight) {
+              const dist = Math.abs((rect.top + rect.height / 2) - centerY);
+              if (dist < minDistance) {
+                minDistance = dist;
+                bestPost = p;
+              }
+            }
+          }
+
+          if (!bestPost && allPosts.length > 0) bestPost = allPosts[0];
+
+          if (bestPost) {
+            const authorEl = bestPost.querySelector('.update-components-actor__name, .feed-shared-actor__name, span[dir="ltr"], strong');
+            const textEl = bestPost.querySelector('.feed-shared-update-v2__description, .update-components-text, .feed-shared-text, div[dir="ltr"]');
+            if (textEl && textEl.innerText.trim().length > 10) {
               post = {
                 author: authorEl?.innerText?.split('\n')[0]?.trim() || 'Author',
                 content: textEl.innerText.trim()
